@@ -5,6 +5,8 @@ const host = 'localhost';
 const port = 8000;
 
 /**
+ * @typedef {import('querystring').ParsedUrlQuery} ParsedUrlQuery
+ *
  * @typedef Route
  * @property {RegExp} path
  * @property {string} method
@@ -23,7 +25,6 @@ class Router {
   }
 
   /**
-   *
    * @param {string|RegExp} path
    * @param {string} method
    * @param {http.RequestListener} listener
@@ -57,8 +58,19 @@ class Router {
   }
 }
 
+/**
+ * @param {http.RequestListener} next
+ * @returns {http.RequestListener}
+ */
 function makeJSONBodyParser(next) {
-  return function (req, res) {
+  /**
+   * @param {http.IncomingMessage & { body?: unknown }} req
+   * @param {http.ServerResponse} res
+   */
+  function listener(req, res) {
+    /**
+     * @type {Uint8Array[]}
+     */
     const body = [];
 
     req.on('data', chunk => body.push(chunk));
@@ -76,15 +88,27 @@ function makeJSONBodyParser(next) {
 
       next(req, res);
     });
-  };
+  }
+
+  return listener;
 }
 
+/**
+ * @param {http.RequestListener} next
+ * @returns {http.RequestListener}
+ */
 function makeQueryParamsParser(next) {
-  return function (req, res) {
-    req.queryParams = url.parse(req.url, true).query;
+  /**
+   * @param {http.IncomingMessage & { queryParams?: ParsedUrlQuery }} req
+   * @param {http.ServerResponse} res
+   */
+  function listener(req, res) {
+    req.queryParams = url.parse(req.url ? req.url : '', true).query;
 
     next(req, res);
-  };
+  }
+
+  return listener;
 }
 
 const router = new Router();
@@ -95,17 +119,33 @@ router.route(/^\/$/, 'GET', (req, res) => {
   res.end(JSON.stringify({ message: 'ok' }));
 });
 
-router.route(/^\/echo\/?/, 'POST', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.statusCode = 200;
-  res.end(JSON.stringify(req.body));
-});
+router.route(
+  /^\/echo\/?/,
+  'POST',
+  /**
+   * @param {http.IncomingMessage & { body?: unknown }} req
+   * @param {http.ServerResponse} res
+   */
+  (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.statusCode = 200;
+    res.end(JSON.stringify(req.body));
+  }
+);
 
-router.route(/^\/params\/?/, 'GET', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.statusCode = 200;
-  res.end(JSON.stringify(req.queryParams));
-});
+router.route(
+  /^\/params\/?/,
+  'GET',
+  /**
+   * @param {http.IncomingMessage & { queryParams?: ParsedUrlQuery }} req
+   * @param {http.ServerResponse} res
+   */
+  (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.statusCode = 200;
+    res.end(JSON.stringify(req.queryParams));
+  }
+);
 
 const server = http.createServer(
   makeJSONBodyParser(makeQueryParamsParser(router.toListener()))

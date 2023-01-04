@@ -5,14 +5,20 @@ const host = 'localhost';
 const port = 8000;
 
 /**
+ * @typedef {import('querystring').ParsedUrlQuery} ParsedUrlQuery
+ *
+ * @typedef {{ body?: unknown }} RawBody
+ * @typedef {{ queryParams?: ParsedUrlQuery }} QueryParams
+ * @typedef {http.IncomingMessage & RawBody & QueryParams} Request
+ * @typedef {http.ServerResponse & { req: Request }} Response
+ * @typedef {(req: Request, res: Response) => void | Promise<void>} RequestListener
+ *
  * @typedef Route
  * @property {RegExp} path
  * @property {string} method
- * @property {http.RequestListener} listener
- */
-
-/**
- * @typedef {(req: http.IncomingMessage, http.ServerResponse, next: () => void)} Middleware
+ * @property {RequestListener} listener
+ *
+ * @typedef {(req: Request, res: Response, next: (err?: unknown) => void) => void} Middleware
  */
 
 class Simpress {
@@ -34,7 +40,6 @@ class Simpress {
   }
 
   /**
-   *
    * @param {Middleware} middleware
    */
   use(middleware) {
@@ -42,10 +47,9 @@ class Simpress {
   }
 
   /**
-   *
    * @param {string|RegExp} path
    * @param {string} method
-   * @param {http.RequestListener} listener
+   * @param {RequestListener} listener
    */
   route(path, method, listener) {
     if (typeof path === 'string') path = new RegExp('^' + path);
@@ -57,7 +61,12 @@ class Simpress {
    * @returns {http.RequestListener}
    */
   toListener() {
-    return async (req, res) => {
+    /**
+     * @param {Request} req
+     * @param {Response} res
+     * @returns {Promise<void>}
+     */
+    const listener = async (req, res) => {
       for (const route of this._routes) {
         // check path and method
         if (
@@ -77,10 +86,20 @@ class Simpress {
       res.writeHead(404);
       res.end(null);
     };
+
+    return listener;
   }
 }
 
+/**
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ */
 function applyJsonBodyParser(req, res, next) {
+  /**
+   * @type {Uint8Array[]}
+   */
   const body = [];
 
   req.on('data', chunk => body.push(chunk));
@@ -100,12 +119,22 @@ function applyJsonBodyParser(req, res, next) {
   });
 }
 
+/**
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ */
 function applyQueryParamsParser(req, res, next) {
-  req.queryParams = url.parse(req.url, true).query;
+  req.queryParams = url.parse(req.url ? req.url : '', true).query;
 
   next();
 }
 
+/**
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ */
 function applyConsoleLogger(req, res, next) {
   console.log(
     new Date(),

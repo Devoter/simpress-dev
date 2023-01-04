@@ -5,14 +5,21 @@ const host = 'localhost';
 const port = 8000;
 
 /**
+ * @typedef {import('querystring').ParsedUrlQuery} ParsedUrlQuery
+ *
+ * @typedef {{ body?: unknown }} RawBody
+ * @typedef {{ pathParams?: Record<string, string> | null }} PathParams
+ * @typedef {{ queryParams?: ParsedUrlQuery }} QueryParams
+ * @typedef {http.IncomingMessage & { pathRegex: RegExp } & RawBody & PathParams & QueryParams} Request
+ * @typedef {http.ServerResponse & { req: Request }} Response
+ * @typedef {(req: Request, res: Response) => void | Promise<void>} RequestListener
+ *
  * @typedef Route
  * @property {RegExp} path
  * @property {string} method
- * @property {http.RequestListener} listener
- */
-
-/**
- * @typedef {(req: http.IncomingMessage, res: http.ServerResponse, next: () => void) => void} Middleware
+ * @property {RequestListener} listener
+ *
+ * @typedef {(req: Request, res: Response, next: (err?: unknown) => void) => void} Middleware
  */
 
 class Simpress {
@@ -45,7 +52,7 @@ class Simpress {
    *
    * @param {string|RegExp} path
    * @param {string} method
-   * @param {http.RequestListener} listener
+   * @param {RequestListener} listener
    */
   route(path, method, listener) {
     if (typeof path === 'string') path = new RegExp('^' + path);
@@ -57,7 +64,13 @@ class Simpress {
    * @returns {http.RequestListener}
    */
   toListener() {
-    return async (req, res) => {
+    /**
+     *
+     * @param {http.IncomingMessage & { pathRegex?: RegExp }} req
+     * @param {http.ServerResponse} res
+     * @returns {Promise<void>}
+     */
+    const listener = async (req, res) => {
       for (const route of this._routes) {
         // check path and method
         if (
@@ -67,10 +80,19 @@ class Simpress {
           req.pathRegex = route.path;
 
           for (const middleware of this._middlewares) {
-            await new Promise(resolve => middleware(req, res, resolve));
+            await new Promise(resolve =>
+              middleware(
+                /** @type {Request} */ (req),
+                /** @type {Response} */ (res),
+                resolve
+              )
+            );
           }
 
-          route.listener(req, res);
+          route.listener(
+            /** @type {Request} */ (req),
+            /** @type {Response} */ (res)
+          );
 
           return;
         }
@@ -79,10 +101,21 @@ class Simpress {
       res.writeHead(404);
       res.end(null);
     };
+
+    return listener;
   }
 }
 
+/**
+ *
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ */
 function applyJsonBodyParser(req, res, next) {
+  /**
+   * @type {Uint8Array[]}
+   */
   const body = [];
 
   req.on('data', chunk => body.push(chunk));
@@ -102,20 +135,35 @@ function applyJsonBodyParser(req, res, next) {
   });
 }
 
+/**
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ */
 function applyQueryParamsParser(req, res, next) {
-  req.queryParams = url.parse(req.url, true).query;
+  req.queryParams = url.parse(req.url ? req.url : '', true).query;
 
   next();
 }
 
+/**
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ */
 function applyPathParamsParser(req, res, next) {
-  const matches = req.url.match(req.pathRegex);
+  const matches = req.url ? req.url.match(req.pathRegex) : null;
 
   req.pathParams = matches && matches.groups ? matches.groups : null;
 
   next();
 }
 
+/**
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ */
 function applyConsoleLogger(req, res, next) {
   console.log(
     new Date(),

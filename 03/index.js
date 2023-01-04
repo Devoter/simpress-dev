@@ -3,8 +3,19 @@ import http from 'http';
 const host = 'localhost';
 const port = 8000;
 
+/**
+ * @param {http.RequestListener} next
+ * @returns {http.RequestListener}
+ */
 function makeJSONBodyParser(next) {
-  return function (req, res) {
+  /**
+   * @param {http.IncomingMessage & { body?: unknown }} req
+   * @param {http.ServerResponse} res
+   */
+  function listener(req, res) {
+    /**
+     * @type {Uint8Array[]}
+     */
     const body = [];
 
     req.on('data', chunk => body.push(chunk));
@@ -22,16 +33,22 @@ function makeJSONBodyParser(next) {
 
       next(req, res);
     });
-  };
+  }
+
+  return listener;
 }
 
-const requestListener = function (req, res) {
+/**
+ * @param {http.IncomingMessage & { body?: unknown }} req
+ * @param {http.ServerResponse} res
+ */
+function requestListener(req, res) {
   console.log(req.body);
 
   res.setHeader('Content-Type', 'application/json');
   res.statusCode = 200;
   res.end(JSON.stringify({ hello: 'world' }));
-};
+}
 
 const server = http.createServer(makeJSONBodyParser(requestListener));
 server.listen(port, host, () => {

@@ -3,7 +3,14 @@ import http from 'http';
 const host = 'localhost';
 const port = 8000;
 
-const requestListener = function (req, res) {
+/**
+ * @param {http.IncomingMessage} req
+ * @param {http.ServerResponse} res
+ */
+function requestListener(req, res) {
+  /**
+   * @type {Uint8Array[]}
+   */
   const body = [];
 
   req.on('data', chunk => body.push(chunk));
@@ -14,7 +21,7 @@ const requestListener = function (req, res) {
     res.statusCode = 200;
     res.end(JSON.stringify({ hello: 'world' }));
   });
-};
+}
 
 const server = http.createServer(requestListener);
 server.listen(port, host, () => {
