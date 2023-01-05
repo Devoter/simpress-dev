@@ -81,10 +81,10 @@ class Route {
  */
 class Simpress {
   /**
-   * @private
+   * @readonly
    * @type {Middleware[]}
    */
-  _middlewares;
+  middlewares;
 
   /**
    * @private
@@ -93,7 +93,7 @@ class Simpress {
   _routes;
 
   constructor() {
-    this._middlewares = [];
+    this.middlewares = [];
     this._routes = new Map();
   }
 
@@ -104,8 +104,8 @@ class Simpress {
    * @returns {Simpress}
    */
   use(middleware) {
-    if (!this._middlewares.includes(middleware)) {
-      this._middlewares.push(middleware);
+    if (!this.middlewares.includes(middleware)) {
+      this.middlewares.push(middleware);
     }
 
     return this;
@@ -165,24 +165,16 @@ class Simpress {
         ) {
           req.pathRegex = route.path;
 
-          for (const middleware of this._middlewares) {
-            await new Promise(resolve =>
-              middleware(
-                /** @type {Request} */ (req),
-                /** @type {Response} */ (res),
-                resolve
-              )
-            );
-          }
-
-          for (const middleware of route.middlewares) {
-            await new Promise(resolve =>
-              middleware(
-                /** @type {Request} */ (req),
-                /** @type {Response} */ (res),
-                resolve
-              )
-            );
+          for (const level of [this, route]) {
+            for (const middleware of level.middlewares) {
+              await new Promise(resolve =>
+                middleware(
+                  /** @type {Request} */ (req),
+                  /** @type {Response} */ (res),
+                  resolve
+                )
+              );
+            }
           }
 
           route.listener(

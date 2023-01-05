@@ -109,16 +109,16 @@ class Route {
  */
 class Simpress {
   /**
-   * @private
+   * @readonly
    * @type {Middleware[]}
    */
-  _middlewares;
+  middlewares;
 
   /**
-   * @private
+   * @readonly
    * @type {ErrorMiddleware[]}
    */
-  _errMiddlewares;
+  errMiddlewares;
 
   /**
    * @private
@@ -127,8 +127,8 @@ class Simpress {
   _routes;
 
   constructor() {
-    this._middlewares = [];
-    this._errMiddlewares = [];
+    this.middlewares = [];
+    this.errMiddlewares = [];
     this._routes = new Map();
   }
 
@@ -139,8 +139,8 @@ class Simpress {
    * @returns {Simpress}
    */
   use(middleware) {
-    if (!this._middlewares.includes(middleware)) {
-      this._middlewares.push(middleware);
+    if (!this.middlewares.includes(middleware)) {
+      this.middlewares.push(middleware);
     }
 
     return this;
@@ -153,8 +153,8 @@ class Simpress {
    * @returns {Simpress}
    */
   useForError(middleware) {
-    if (!this._errMiddlewares.includes(middleware)) {
-      this._errMiddlewares.push(middleware);
+    if (!this.errMiddlewares.includes(middleware)) {
+      this.errMiddlewares.push(middleware);
     }
 
     return this;
@@ -214,57 +214,32 @@ class Simpress {
         ) {
           req.pathRegex = route.path;
 
-          for (const middleware of this._middlewares) {
-            let err = await new Promise(resolve =>
-              middleware(
-                /** @type {Request} */ (req),
-                /** @type {Response} */ (res),
-                resolve
-              )
-            );
+          for (const level of [this, route]) {
+            for (const middleware of level.middlewares) {
+              let err = await new Promise(resolve =>
+                middleware(
+                  /** @type {Request} */ (req),
+                  /** @type {Response} */ (res),
+                  resolve
+                )
+              );
 
-            if (err !== undefined) {
-              for (const errMiddleware of this._errMiddlewares) {
-                err = await new Promise(resolve =>
-                  errMiddleware(
-                    err,
-                    /** @type {Request} */ (req),
-                    /** @type {Response} */ (res),
-                    resolve
-                  )
-                );
+              if (err !== undefined) {
+                for (const errMiddleware of level.errMiddlewares) {
+                  err = await new Promise(resolve =>
+                    errMiddleware(
+                      err,
+                      /** @type {Request} */ (req),
+                      /** @type {Response} */ (res),
+                      resolve
+                    )
+                  );
 
-                if (err === undefined) return;
+                  if (err === undefined) return;
+                }
+
+                return;
               }
-
-              return;
-            }
-          }
-
-          for (const middleware of route.middlewares) {
-            let err = await new Promise(resolve =>
-              middleware(
-                /** @type {Request} */ (req),
-                /** @type {Response} */ (res),
-                resolve
-              )
-            );
-
-            if (err !== undefined) {
-              for (const errMiddleware of route.errMiddlewares) {
-                err = await new Promise(resolve =>
-                  errMiddleware(
-                    err,
-                    /** @type {Request} */ (req),
-                    /** @type {Response} */ (res),
-                    resolve
-                  )
-                );
-
-                if (err === undefined) return;
-              }
-
-              return;
             }
           }
 

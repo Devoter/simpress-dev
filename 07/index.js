@@ -24,10 +24,10 @@ const port = 8000;
 
 class Simpress {
   /**
-   * @private
+   * @readonly
    * @type {Middleware[]}
    */
-  _middlewares;
+  middlewares;
 
   /**
    * @private
@@ -36,7 +36,7 @@ class Simpress {
   _routes;
 
   constructor() {
-    this._middlewares = [];
+    this.middlewares = [];
     this._routes = [];
   }
 
@@ -45,7 +45,7 @@ class Simpress {
    * @param {Middleware} middleware
    */
   use(middleware) {
-    this._middlewares.push(middleware);
+    this.middlewares.push(middleware);
   }
 
   /**
@@ -79,7 +79,7 @@ class Simpress {
         ) {
           req.pathRegex = route.path;
 
-          for (const middleware of this._middlewares) {
+          for (const middleware of this.middlewares) {
             await new Promise(resolve =>
               middleware(
                 /** @type {Request} */ (req),
