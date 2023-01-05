@@ -7,6 +7,7 @@
     "importHelpers": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
     "composite": true,
     "allowJs": true,
     "checkJs": true,

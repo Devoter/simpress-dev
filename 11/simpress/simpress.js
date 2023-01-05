@@ -2,7 +2,13 @@ import { Route } from './route';
 import { Router } from './router';
 
 /**
- * @typedef {import('http').RequestListener} RequestListener
+ * @typedef {import('http').RequestListener} HttpRequestListener
+ * @typedef {import('http').IncomingMessage} HttpIncomingMessage
+ * @typedef {import('http').ServerResponse} HttpServerResponse
+ *
+ * @typedef {import('./types').RequestListener} RequestListener
+ * @typedef {import('./types').Request} Request
+ * @typedef {import('./types').Response} Response
  * @typedef {import('./types').Middleware} Middleware
  * @typedef {import('./types').ErrorMiddleware} ErrorMiddleware
  */
@@ -38,7 +44,7 @@ export class Simpress {
   /**
    * Appends a new middleware.
    *
-   * @param {Middleware} middleware 
+   * @param {Middleware} middleware
    * @returns {Simpress}
    */
   use(middleware) {
@@ -52,7 +58,7 @@ export class Simpress {
   /**
    * Appends a new middleware which handles errors from other middlewares.
    *
-   * @param {ErrorMiddleware} middleware 
+   * @param {ErrorMiddleware} middleware
    * @returns {Simpress}
    */
   useForError(middleware) {
@@ -66,7 +72,7 @@ export class Simpress {
   /**
    * Appends a router to the instance.
    *
-   * @param {Router} router 
+   * @param {Router} router
    * @returns {Simpress}
    */
   useRouter(router) {
@@ -117,23 +123,45 @@ export class Simpress {
   /**
    * Converts the instance to an @see http.RequestListener .
    *
-   * @returns {RequestListener}
+   * @returns {HttpRequestListener}
    */
   toListener() {
-    return async (req, res) => {
+    /**
+     *
+     * @param {HttpIncomingMessage & { pathRegex?: RegExp }} req
+     * @param {HttpServerResponse} res
+     * @returns {Promise<void>}
+     */
+    const listener = async (req, res) => {
       for (const router of this._routers) {
         for (const [_, route] of router.routes) {
           // check path and method
-          if (route.path.test(req.url) && req.method === route.method) {
+          if (
+            route.path.test(req.url ? req.url : '') &&
+            req.method === route.method
+          ) {
             req.pathRegex = route.path;
 
             for (const level of [this, router, route]) {
               for (const middleware of level.middlewares) {
-                let err = await new Promise(resolve => middleware(req, res, resolve));
+                let err = await new Promise(resolve =>
+                  middleware(
+                    /** @type {Request} */ (req),
+                    /** @type {Response} */ (res),
+                    resolve
+                  )
+                );
 
                 if (err !== undefined) {
                   for (const errMiddleware of level.errMiddlewares) {
-                    err = await new Promise(resolve => errMiddleware(err, req, res, resolve));
+                    err = await new Promise(resolve =>
+                      errMiddleware(
+                        err,
+                        /** @type {Request} */ (req),
+                        /** @type {Response} */ (res),
+                        resolve
+                      )
+                    );
 
                     if (err === undefined) return;
                   }
@@ -143,7 +171,10 @@ export class Simpress {
               }
             }
 
-            route.listener(req, res);
+            route.listener(
+              /** @type {Request} */ (req),
+              /** @type {Response} */ (res)
+            );
 
             return;
           }
@@ -152,6 +183,8 @@ export class Simpress {
 
       res.writeHead(404);
       res.end();
-    }
+    };
+
+    return listener;
   }
 }

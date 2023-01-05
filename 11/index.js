@@ -2,7 +2,7 @@ import http from 'http';
 
 import {
   Simpress,
-  Router, 
+  Router,
   applyJsonBodyParser,
   applyPathParamsParser,
   applyQueryParamsParser,
@@ -22,16 +22,21 @@ const ErrInvalidUserNick = new Error('invalid user nickname');
 const ErrInvalidUserId = new Error('invalid user id');
 const ErrUserNotFound = new Error('user was not found');
 
+/**
+ * @typedef {import('./simpress').Request} Request
+ * @typedef {import('./simpress').Response} Response
+ * @typedef {import('./simpress').Route} Route
+ */
 
 /**
  * Appends a JSON body validator middleware.
- * 
+ *
  * This middleware returns the 400 status code
  * if the request body is not an object.
  *
- * @param {http.IncomingMessage} req 
- * @param {http.ServerResponse} res 
- * @param {(err?: unknown) => void} next 
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
  */
 function applyJsonBodyValidator(req, res, next) {
   if (!req.body || typeof req.body !== 'object') {
@@ -41,6 +46,14 @@ function applyJsonBodyValidator(req, res, next) {
   }
 }
 
+/**
+ *
+ * @param {unknown} err
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ * @returns
+ */
 function applyMiddlewareErrorsHandler(err, req, res, next) {
   if (err != ErrInvalidRequestBody) {
     next(err);
@@ -53,6 +66,13 @@ function applyMiddlewareErrorsHandler(err, req, res, next) {
   res.end(JSON.stringify({ message: ErrInvalidRequestBody.message }));
   next();
 }
+
+/**
+ * @typedef User
+ * @property {number|null=} id
+ * @property {string} name
+ * @property {string} nick
+ */
 
 function main() {
   const app = new Simpress();
@@ -74,11 +94,12 @@ function main() {
     res.end(JSON.stringify(req.body));
   });
 
-  app.route(/^\/params\/(?<name>\w+)\/?/, 'GET', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.statusCode = 200;
-    res.end(JSON.stringify({ query: req.queryParams, path: req.pathParams }));
-  })
+  app
+    .route(/^\/params\/(?<name>\w+)\/?/, 'GET', (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ query: req.queryParams, path: req.pathParams }));
+    })
     .use((req, res, next) => {
       if (!req.pathParams || !/^[a-zA-Z0-9]+$/.test(req.pathParams.name)) {
         next(ErrInvalidNamePathParameter);
@@ -117,27 +138,52 @@ function main() {
       res.end(JSON.stringify({ message: ErrNoQueryParams.message }));
     });
 
-
-  app.findRoute('/echo', 'POST')
+  /** @type {Route} */ (app.findRoute('/echo', 'POST'))
     .use(applyJsonBodyValidator)
     .useForError(applyMiddlewareErrorsHandler);
-  
+
   let usersListCounter = 0;
+
+  /**
+   * @type {User[]}
+   */
   const usersList = [];
   const usersRouter = new Router();
 
   usersRouter.route('/users', 'GET', (req, res) => {
-    const page = req.queryParams && req.queryParams.page ? Number(req.queryParams.page) : 0;
-    const pageSize = req.queryParams && req.queryParams.pageSize ? Number(req.queryParams.pageSize) : 10;
+    const page =
+      req.queryParams && req.queryParams.page
+        ? Number(req.queryParams.page)
+        : 0;
+    const pageSize =
+      req.queryParams && req.queryParams.pageSize
+        ? Number(req.queryParams.pageSize)
+        : 10;
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(usersList.slice(page * pageSize, page * pageSize + pageSize)));
-  })
+    res.end(
+      JSON.stringify(
+        usersList.slice(page * pageSize, page * pageSize + pageSize)
+      )
+    );
+  });
+
+  const ErrInvalidUserData = new Error('invalid user data');
+  const ErrInvalidUserName = new Error('invalid user name');
+  const ErrInvalidUserNick = new Error('invalid user nickname');
+  const ErrInvalidUserId = new Error('invalid user id');
+  const ErrUserNotFound = new Error('user was not found');
 
   const validateUserFactory = (update = false) => {
-    return (req, res, next) => {
-      const user = req.body;
+    /**
+     *
+     * @param {Request} req
+     * @param {Response} res
+     * @param {(err?: unknown) => void} next
+     */
+    const mw = (req, res, next) => {
+      const user = /** @type {User} */ (req.body);
       const id = req.pathParams && req.pathParams.id;
 
       if (!user || typeof user !== 'object') {
@@ -152,35 +198,51 @@ function main() {
         next();
       }
     };
+
+    return mw;
   };
 
+  /**
+   *
+   * @param {unknown} err
+   * @param {Request} req
+   * @param {Response} res
+   * @param {(err?: unknown) => void} next
+   */
   const handleUserValidationError = (err, req, res, next) => {
-    if (err === ErrInvalidUserData || err === ErrInvalidUserName ||
-      err === ErrInvalidUserNick || err === ErrInvalidUserId) {
+    if (
+      err === ErrInvalidUserData ||
+      err === ErrInvalidUserName ||
+      err === ErrInvalidUserNick ||
+      err === ErrInvalidUserId
+    ) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ message: err.message }));
+      res.end(JSON.stringify({ message: /** @type {Error} */ (err).message }));
       next();
     } else {
       next(err);
     }
   };
 
-  usersRouter.route('/users', 'POST', (req, res) => {
-    const user = req.body;
-    const id = ++usersListCounter;
-    const item = { id, name: user.name, nick: user.nick };
+  usersRouter
+    .route('/users', 'POST', (req, res) => {
+      const user = /** @type {User} */ (req.body);
+      const id = ++usersListCounter;
+      const item = { id, name: user.name, nick: user.nick };
 
-    usersList.push(item);
+      usersList.push(item);
 
-    res.statusCode = 201;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(item));
-  }).use(validateUserFactory())
+      res.statusCode = 201;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(item));
+    })
+    .use(validateUserFactory())
     .useForError(handleUserValidationError);
-  
+
   usersRouter.route(/^\/users\/(?<id>\d+)\/?/, 'GET', (req, res) => {
-    const id = req.pathParams && req.pathParams.id ? Number(req.pathParams.id) : null;
+    const id =
+      req.pathParams && req.pathParams.id ? Number(req.pathParams.id) : null;
     const item = usersList.find(u => u.id === id);
 
     if (!item) {
@@ -195,29 +257,38 @@ function main() {
     res.end(JSON.stringify(item));
   });
 
-  usersRouter.route(/^\/users\/(?<id>\d+)\/?/, 'PUT', (req, res) => {
-    const id = req.pathParams && req.pathParams.id ? Number(req.pathParams.id) : null;
-    const index = usersList.findIndex(u => u.id === id);
+  usersRouter
+    .route(/^\/users\/(?<id>\d+)\/?/, 'PUT', (req, res) => {
+      const id =
+        req.pathParams && req.pathParams.id ? Number(req.pathParams.id) : null;
+      const index = usersList.findIndex(u => u.id === id);
 
-    if (index === -1) {
-      res.statusCode = 404;
-      res.end(JSON.stringify({ message: ErrUserNotFound.message }));
+      if (index === -1) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ message: ErrUserNotFound.message }));
 
-      return;
-    }
+        return;
+      }
 
-    const item = { id, name: req.body.name, nick: req.body.nick };
+      const user = /** @type {User} */ (req.body);
+      const item = /** @type {User} */ ({
+        id,
+        name: user.name,
+        nick: user.nick
+      });
 
-    usersList[index] = item;
+      usersList[index] = item;
 
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(item));
-  }).use(validateUserFactory(true))
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(item));
+    })
+    .use(validateUserFactory(true))
     .useForError(handleUserValidationError);
-  
+
   usersRouter.route(/^\/users\/(?<id>\d+)\/?/, 'DELETE', (req, res) => {
-    const id = req.pathParams && req.pathParams.id ? Number(req.pathParams.id) : null;
+    const id =
+      req.pathParams && req.pathParams.id ? Number(req.pathParams.id) : null;
     const index = usersList.findIndex(u => u.id === id);
 
     if (index === -1) {
@@ -233,7 +304,7 @@ function main() {
     res.statusCode = 204;
     res.end();
   });
-  
+
   app.useRouter(usersRouter);
 
   const server = http.createServer(app.toListener());

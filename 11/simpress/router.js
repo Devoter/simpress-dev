@@ -1,5 +1,11 @@
 import { Route } from './route';
 
+/**
+ * @typedef {import('./types').RequestListener} RequestListener
+ * @typedef {import('./types').Middleware} Middleware
+ * @typedef {import('./types').ErrorMiddleware} ErrorMiddleware
+ */
+
 export class Router {
   /**
    * @readonly
@@ -25,11 +31,11 @@ export class Router {
     this.errMiddlewares = [];
   }
 
-    /**
+  /**
    * Appends a new middleware to the router.
    *
-   * @param {Middleware} middleware 
-   * @returns {Route}
+   * @param {Middleware} middleware
+   * @returns {Router}
    */
   use(middleware) {
     if (!this.middlewares.includes(middleware)) {
@@ -42,7 +48,7 @@ export class Router {
   /**
    * Appends a new middleware to the router which handles errors from other middlewares.
    *
-   * @param {ErrorMiddleware} middleware 
+   * @param {ErrorMiddleware} middleware
    * @returns {Router}
    */
   useForError(middleware) {
@@ -58,7 +64,7 @@ export class Router {
    *
    * @param {string|RegExp} path route path
    * @param {string} method http method
-   * @param {http.RequestListener} listener request listener function
+   * @param {RequestListener} listener request listener function
    * @returns {Route} route instance
    */
   route(path, method, listener) {

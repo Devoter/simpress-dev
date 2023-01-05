@@ -11,9 +11,14 @@ const ErrNoQueryParams = new Error('no query params');
 /**
  * @typedef {import('querystring').ParsedUrlQuery} ParsedUrlQuery
  *
- * @typedef {(req: http.IncomingMessage, res: http.ServerResponse, next: (err?: unknown) => void) => void} Middleware
- *
- * @typedef {(err: unknown, req: http.IncomingMessage, res: http.ServerResponse, next: (err?: unknown) => void) => void} ErrorMiddleware
+ * @typedef {{ body?: unknown }} RawBody
+ * @typedef {{ pathParams?: Record<string, string> | null }} PathParams
+ * @typedef {{ queryParams?: ParsedUrlQuery }} QueryParams
+ * @typedef {http.IncomingMessage & { pathRegex: RegExp } & RawBody & PathParams & QueryParams} Request
+ * @typedef {http.ServerResponse & { req: Request }} Response
+ * @typedef {(req: Request, res: Response) => void | Promise<void>} RequestListener
+ * @typedef {(req: Request, res: Response, next: (err?: unknown) => void) => void} Middleware
+ * @typedef {(err: unknown, req: Request, res: Response, next: (err?: unknown) => void) => void} ErrorMiddleware
  */
 
 class Route {
@@ -37,7 +42,7 @@ class Route {
    * Request listener function.
    *
    * @readonly
-   * @type {http.RequestListener}
+   * @type {RequestListener}
    */
   listener;
 
@@ -60,7 +65,7 @@ class Route {
   /**
    * @param {RegExp} path route path
    * @param {string} method http method
-   * @param {http.RequestListener} listener request listener function
+   * @param {RequestListener} listener request listener function
    */
   constructor(path, method, listener) {
     this.path = path;
@@ -157,7 +162,7 @@ class Router {
    *
    * @param {string|RegExp} path route path
    * @param {string} method http method
-   * @param {http.RequestListener} listener request listener function
+   * @param {RequestListener} listener request listener function
    * @returns {Route} route instance
    */
   route(path, method, listener) {
@@ -261,7 +266,7 @@ class Simpress {
    *
    * @param {string|RegExp} path route path
    * @param {string} method http method
-   * @param {http.RequestListener} listener request listener function
+   * @param {RequestListener} listener request listener function
    * @returns {Route} route instance
    */
   route(path, method, listener) {
@@ -299,7 +304,13 @@ class Simpress {
    * @returns {http.RequestListener}
    */
   toListener() {
-    return async (req, res) => {
+    /**
+     *
+     * @param {http.IncomingMessage & { pathRegex?: RegExp }} req
+     * @param {http.ServerResponse} res
+     * @returns
+     */
+    const listener = async (req, res) => {
       for (const router of this._routers) {
         for (const [_, route] of router.routes) {
           // check path and method
@@ -312,13 +323,22 @@ class Simpress {
             for (const level of [this, router, route]) {
               for (const middleware of level.middlewares) {
                 let err = await new Promise(resolve =>
-                  middleware(req, res, resolve)
+                  middleware(
+                    /** @type {Request} */ (req),
+                    /** @type {Response} */ (res),
+                    resolve
+                  )
                 );
 
                 if (err !== undefined) {
                   for (const errMiddleware of level.errMiddlewares) {
                     err = await new Promise(resolve =>
-                      errMiddleware(err, req, res, resolve)
+                      errMiddleware(
+                        err,
+                        /** @type {Request} */ (req),
+                        /** @type {Response} */ (res),
+                        resolve
+                      )
                     );
 
                     if (err === undefined) return;
@@ -329,7 +349,10 @@ class Simpress {
               }
             }
 
-            route.listener(req, res);
+            route.listener(
+              /** @type {Request} */ (req),
+              /** @type {Response} */ (res)
+            );
 
             return;
           }
@@ -339,14 +362,16 @@ class Simpress {
       res.writeHead(404);
       res.end();
     };
+
+    return listener;
   }
 }
 
 /**
  * Appends a JSON body parser middleware.
  *
- * @param {http.IncomingMessage & { body?: unknown }} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyJsonBodyParser(req, res, next) {
@@ -372,8 +397,8 @@ function applyJsonBodyParser(req, res, next) {
 /**
  * Appends a query params parser middleware.
  *
- * @param {http.IncomingMessage & { queryParams?: ParsedUrlQuery}} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyQueryParamsParser(req, res, next) {
@@ -384,8 +409,8 @@ function applyQueryParamsParser(req, res, next) {
 /**
  * Appends a path params parser middleware.
  *
- * @param {http.IncomingMessage & { pathRegex: RegExp; pathParams?: Record<string, string> | null }} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyPathParamsParser(req, res, next) {
@@ -398,8 +423,8 @@ function applyPathParamsParser(req, res, next) {
 /**
  * Appends a request console logger middleware.
  *
- * @param {http.IncomingMessage & { pathRegex: RegExp; pathParams?: Record<string, string> | null; queryParams?: ParsedUrlQuery; body?: unknown }} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyConsoleLogger(req, res, next) {
@@ -424,8 +449,8 @@ function applyConsoleLogger(req, res, next) {
  * This middleware returns the 400 status code
  * if the request body is not an object.
  *
- * @param {http.IncomingMessage & { body?: unknown }} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyJsonBodyValidator(req, res, next) {
@@ -439,8 +464,8 @@ function applyJsonBodyValidator(req, res, next) {
 /**
  *
  * @param {unknown} err
- * @param {http.IncomingMessage} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  * @returns
  */
@@ -528,8 +553,7 @@ function main() {
       res.end(JSON.stringify({ message: ErrNoQueryParams.message }));
     });
 
-  app
-    .findRoute('/echo', 'POST')
+  /** @type {Route} */ (app.findRoute('/echo', 'POST'))
     .use(applyJsonBodyValidator)
     .useForError(applyMiddlewareErrorsHandler);
 
@@ -567,8 +591,14 @@ function main() {
   const ErrUserNotFound = new Error('user was not found');
 
   const validateUserFactory = (update = false) => {
-    return (req, res, next) => {
-      const user = req.body;
+    /**
+     *
+     * @param {Request} req
+     * @param {Response} res
+     * @param {(err?: unknown) => void} next
+     */
+    const mw = (req, res, next) => {
+      const user = /** @type {User} */ (req.body);
       const id = req.pathParams && req.pathParams.id;
 
       if (!user || typeof user !== 'object') {
@@ -583,8 +613,17 @@ function main() {
         next();
       }
     };
+
+    return mw;
   };
 
+  /**
+   *
+   * @param {unknown} err
+   * @param {Request} req
+   * @param {Response} res
+   * @param {(err?: unknown) => void} next
+   */
   const handleUserValidationError = (err, req, res, next) => {
     if (
       err === ErrInvalidUserData ||
@@ -594,7 +633,7 @@ function main() {
     ) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ message: err.message }));
+      res.end(JSON.stringify({ message: /** @type {Error} */ (err).message }));
       next();
     } else {
       next(err);
@@ -603,7 +642,7 @@ function main() {
 
   usersRouter
     .route('/users', 'POST', (req, res) => {
-      const user = req.body;
+      const user = /** @type {User} */ (req.body);
       const id = ++usersListCounter;
       const item = { id, name: user.name, nick: user.nick };
 
@@ -646,7 +685,12 @@ function main() {
         return;
       }
 
-      const item = { id, name: req.body.name, nick: req.body.nick };
+      const user = /** @type {User} */ (req.body);
+      const item = /** @type {User} */ ({
+        id,
+        name: user.name,
+        nick: user.nick
+      });
 
       usersList[index] = item;
 

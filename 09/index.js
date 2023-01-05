@@ -11,9 +11,14 @@ const ErrNoQueryParams = new Error('no query params');
 /**
  * @typedef {import('querystring').ParsedUrlQuery} ParsedUrlQuery
  *
- * @typedef {(req: http.IncomingMessage, res: http.ServerResponse, next: (err?: unknown) => void) => void} Middleware
- *
- * @typedef {(err: unknown, req: http.IncomingMessage, res: http.ServerResponse, next: (err?: unknown) => void) => void} ErrorMiddleware
+ * @typedef {{ body?: unknown }} RawBody
+ * @typedef {{ pathParams?: Record<string, string> | null }} PathParams
+ * @typedef {{ queryParams?: ParsedUrlQuery }} QueryParams
+ * @typedef {http.IncomingMessage & { pathRegex: RegExp } & RawBody & PathParams & QueryParams} Request
+ * @typedef {http.ServerResponse & { req: Request }} Response
+ * @typedef {(req: Request, res: Response) => void | Promise<void>} RequestListener
+ * @typedef {(req: Request, res: Response, next: (err?: unknown) => void) => void} Middleware
+ * @typedef {(err: unknown, req: Request, res: Response, next: (err?: unknown) => void) => void} ErrorMiddleware
  */
 
 class Route {
@@ -37,7 +42,7 @@ class Route {
    * Request listener function.
    *
    * @readonly
-   * @type {http.RequestListener}
+   * @type {RequestListener}
    */
   listener;
 
@@ -60,7 +65,7 @@ class Route {
   /**
    * @param {RegExp} path route path
    * @param {string} method http method
-   * @param {http.RequestListener} listener request listener function
+   * @param {RequestListener} listener request listener function
    */
   constructor(path, method, listener) {
     this.path = path;
@@ -160,7 +165,7 @@ class Simpress {
    *
    * @param {string|RegExp} path route path
    * @param {string} method http method
-   * @param {http.RequestListener} listener request listener function
+   * @param {RequestListener} listener request listener function
    * @returns {Route} route instance
    */
   route(path, method, listener) {
@@ -194,7 +199,13 @@ class Simpress {
    * @returns {http.RequestListener}
    */
   toListener() {
-    return async (req, res) => {
+    /**
+     *
+     * @param {http.IncomingMessage & { pathRegex?: RegExp }} req
+     * @param {http.ServerResponse} res
+     * @returns
+     */
+    const listener = async (req, res) => {
       for (const [_, route] of this._routes) {
         // check path and method
         if (
@@ -205,13 +216,22 @@ class Simpress {
 
           for (const middleware of this._middlewares) {
             let err = await new Promise(resolve =>
-              middleware(req, res, resolve)
+              middleware(
+                /** @type {Request} */ (req),
+                /** @type {Response} */ (res),
+                resolve
+              )
             );
 
             if (err !== undefined) {
               for (const errMiddleware of this._errMiddlewares) {
                 err = await new Promise(resolve =>
-                  errMiddleware(err, req, res, resolve)
+                  errMiddleware(
+                    err,
+                    /** @type {Request} */ (req),
+                    /** @type {Response} */ (res),
+                    resolve
+                  )
                 );
 
                 if (err === undefined) return;
@@ -223,13 +243,22 @@ class Simpress {
 
           for (const middleware of route.middlewares) {
             let err = await new Promise(resolve =>
-              middleware(req, res, resolve)
+              middleware(
+                /** @type {Request} */ (req),
+                /** @type {Response} */ (res),
+                resolve
+              )
             );
 
             if (err !== undefined) {
               for (const errMiddleware of route.errMiddlewares) {
                 err = await new Promise(resolve =>
-                  errMiddleware(err, req, res, resolve)
+                  errMiddleware(
+                    err,
+                    /** @type {Request} */ (req),
+                    /** @type {Response} */ (res),
+                    resolve
+                  )
                 );
 
                 if (err === undefined) return;
@@ -239,7 +268,10 @@ class Simpress {
             }
           }
 
-          route.listener(req, res);
+          route.listener(
+            /** @type {Request} */ (req),
+            /** @type {Response} */ (res)
+          );
 
           return;
         }
@@ -248,17 +280,22 @@ class Simpress {
       res.writeHead(404);
       res.end();
     };
+
+    return listener;
   }
 }
 
 /**
  * Appends a JSON body parser middleware.
  *
- * @param {http.IncomingMessage} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyJsonBodyParser(req, res, next) {
+  /**
+   * @type {Uint8Array[]}
+   */
   const body = [];
 
   req.on('data', chunk => body.push(chunk));
@@ -278,8 +315,8 @@ function applyJsonBodyParser(req, res, next) {
 /**
  * Appends a query params parser middleware.
  *
- * @param {http.IncomingMessage & { queryParams?: ParsedUrlQuery }} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyQueryParamsParser(req, res, next) {
@@ -290,8 +327,8 @@ function applyQueryParamsParser(req, res, next) {
 /**
  * Appends a path params parser middleware.
  *
- * @param {http.IncomingMessage & { pathRegex: RegExp; pathParams?: Record<string, string> | null }} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyPathParamsParser(req, res, next) {
@@ -304,8 +341,8 @@ function applyPathParamsParser(req, res, next) {
 /**
  * Appends a request console logger middleware.
  *
- * @param {http.IncomingMessage & { pathParams?: Record<string, string> | null; queryParams?: ParsedUrlQuery | null; body?: unknown }} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyConsoleLogger(req, res, next) {
@@ -330,8 +367,8 @@ function applyConsoleLogger(req, res, next) {
  * This middleware returns the 400 status code
  * if the request body is not an object.
  *
- * @param {http.IncomingMessage} req
- * @param {http.ServerResponse} res
+ * @param {Request} req
+ * @param {Response} res
  * @param {(err?: unknown) => void} next
  */
 function applyJsonBodyValidator(req, res, next) {
@@ -342,6 +379,14 @@ function applyJsonBodyValidator(req, res, next) {
   }
 }
 
+/**
+ *
+ * @param {unknown} err
+ * @param {Request} req
+ * @param {Response} res
+ * @param {(err?: unknown) => void} next
+ * @returns
+ */
 function applyMiddlewareErrorsHandler(err, req, res, next) {
   if (err != ErrInvalidRequestBody) {
     next(err);
@@ -416,8 +461,7 @@ function main() {
       res.end(JSON.stringify({ message: ErrNoQueryParams.message }));
     });
 
-  app
-    .findRoute(/^\/echo\/?/, 'POST')
+  /** @type {Route} */ (app.findRoute(/^\/echo\/?/, 'POST'))
     .use(applyJsonBodyValidator)
     .useForError(applyMiddlewareErrorsHandler);
 

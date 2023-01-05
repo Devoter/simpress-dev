@@ -1,12 +1,13 @@
 /**
- * @typedef {import('http').RequestListener} RequestListener
+ * @typedef {import('./types').RequestListener} RequestListener
+ * @typedef {import('./types').Middleware} Middleware
+ * @typedef {import('./types').ErrorMiddleware} ErrorMiddleware
  */
 
 export class Route {
   /**
    * Route path regular expression.
    *
-   * @private
    * @readonly
    * @type {RegExp}
    */
@@ -15,7 +16,6 @@ export class Route {
   /**
    * HTTP method.
    *
-   * @private
    * @readonly
    * @type {string}
    */
@@ -24,7 +24,6 @@ export class Route {
   /**
    * Request listener function.
    *
-   * @private
    * @readonly
    * @type {RequestListener}
    */
@@ -33,7 +32,6 @@ export class Route {
   /**
    * Route-specified middlewares.
    *
-   * @private
    * @readonly
    * @type {Middleware[]}
    */
@@ -42,7 +40,6 @@ export class Route {
   /**
    * Route-specified error middlewares.
    *
-   * @private
    * @readonly
    * @type {ErrorMiddleware[]}
    */
@@ -64,7 +61,7 @@ export class Route {
   /**
    * Appends a new middleware to the route.
    *
-   * @param {Middleware} middleware 
+   * @param {Middleware} middleware
    * @returns {Route}
    */
   use(middleware) {
@@ -78,8 +75,8 @@ export class Route {
   /**
    * Appends a new middleware to the route which handles errors from other middlewares.
    *
-   * @param {ErrorMiddleware} middleware 
-   * @returns {Simpress}
+   * @param {ErrorMiddleware} middleware
+   * @returns {Route}
    */
   useForError(middleware) {
     if (!this.errMiddlewares.includes(middleware)) {
