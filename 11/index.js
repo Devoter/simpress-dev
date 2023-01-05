@@ -7,7 +7,7 @@ import {
   applyPathParamsParser,
   applyQueryParamsParser,
   applyConsoleLogger
-} from './simpress';
+} from './simpressjs';
 
 const host = 'localhost';
 const port = 8000;
@@ -23,9 +23,9 @@ const ErrInvalidUserId = new Error('invalid user id');
 const ErrUserNotFound = new Error('user was not found');
 
 /**
- * @typedef {import('./simpress').Request} Request
- * @typedef {import('./simpress').Response} Response
- * @typedef {import('./simpress').Route} Route
+ * @typedef {import('./simpressjs').Request} Request
+ * @typedef {import('./simpressjs').Response} Response
+ * @typedef {import('./simpressjs').Route} Route
  */
 
 /**

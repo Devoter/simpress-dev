@@ -35,8 +35,7 @@
     "typescript": "^4.9.4"
   },
   "type": "module",
-  "dependencies": {},
-  "peerDependencies": {
-    "simpress": "*"
+  "dependencies": {
+    "simpressjs": "^1.0.1"
   }
 }

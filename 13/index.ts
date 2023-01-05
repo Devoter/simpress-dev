@@ -1,6 +1,6 @@
 import { createServer } from 'http';
 
-import { Simpress } from "simpress";
+import { Simpress } from 'simpressjs';
 
 const host = 'localhost';
 const port = 8000;
@@ -10,7 +10,7 @@ const app = new Simpress();
 app.route('/', 'GET', (req, res) => {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({'hello': 'world'}));
+  res.end(JSON.stringify({ hello: 'world' }));
 });
 
 const server = createServer(app.toListener());
