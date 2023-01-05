@@ -1,6 +1,6 @@
 {
   "name": "simpress-dev",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "The process of developing a simple http framework",
   "main": "index.js",
   "scripts": {
